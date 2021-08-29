@@ -100,16 +100,20 @@ def main():
     args = get_args()
     path = args.checkpoint
     model = load_checkpoint(path)
+    #class_to_idx = model.class_to_idx.item()
     
     with open('cat_to_name.json', 'r') as json_file:
         cat_to_name = json.load(json_file)
     
     probabilities = predict(args.input, model, args.top_k, args.gpu)
-    labels = [cat_to_name[str(index+1)] for index in np.array(probabilities[1][0])]
+    
+    mapping = {val: key for key, val in model.class_to_idx.items()}
+    classes = [mapping [item] for item in probabilities[1][0].cpu().numpy()]
+    
+    labels = [cat_to_name[str(index)] for index in classes]
+    
     probability = np.array(probabilities[0][0])
     
-    
-    print("")
     i = 0
     while i < args.top_k:
         print("{}. {} / Probability: {:.2f}%".format((i+1), labels[i].capitalize(), 100*probability[i]))
