@@ -5,9 +5,9 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import torchvision.models as models
 from torch.utils.data import DataLoader
+from collections import OrderedDict
 import time
 import json
-
 
 structures = {"vgg16" : 25088,
              "densenet121" : 1024}
@@ -18,13 +18,13 @@ def get_args():
     parser.add_argument('--save_dir', action="store", default='./checkpoint.pth')
     parser.add_argument('--arch', action = 'store', default='vgg16')
     parser.add_argument('--learning_rate', action='store', default=0.001, type=float)
-    parser.add_argument('--hidden_units', action='store', dest="hidden_units", default=512, type=int)
+    parser.add_argument('--hidden_units', action='store', dest="hidden_units", default=[2048, 256], type=list)
     parser.add_argument('--epochs', action='store', default=3, type=int)
     parser.add_argument('--dropout', action="store", type=float, default=0.5)
     parser.add_argument('--gpu', default="gpu", action='store')
     return parser.parse_args()
 
-def setup_network(arch="vgg16", dropout=0.1, hidden_units=4096, lr=0.001, device='gpu'):
+def setup_network(arch="vgg16", dropout=0.1, hidden_units=[4096,2048], lr=0.001, device='gpu'):
     
     if arch == 'vgg16':
         model = models.vgg16(pretrained=True)
@@ -34,12 +34,14 @@ def setup_network(arch="vgg16", dropout=0.1, hidden_units=4096, lr=0.001, device
     for param in model.parameters():
         param.requires_grad=False
     
-    model.classifier = nn.Sequential(nn.Linear(structures[arch], hidden_units),
-                                     nn.ReLU(),
-                                     nn.Dropout(dropout),
-                                     nn.Linear(hidden_units, 102),
-                                     nn.LogSoftmax(dim=1)
-                                    )
+    model.classifier = nn.Sequential(OrderedDict([('fc1', nn.Linear(structures[arch], hidden_units[0])),
+                                                  ('relu1', nn.ReLU()),
+                                                  ('dropout1', nn.Dropout(dropout)),
+                                                  ('fc2', nn.Linear(hidden_units[0], hidden_units[1])),
+                                                  ('relu2', nn.ReLU()),
+                                                  ('dropout2', nn.Dropout(dropout)),
+                                                  ('fc3', nn.Linear(hidden_units[1], 102)),
+                                                  ('output', nn.LogSoftmax(dim=1))]))
     model = model.to('cuda')
     criterion = nn.NLLLoss()
     
@@ -156,6 +158,7 @@ def main():
                 'learning_rate' : args.learning_rate,
                 'epochs' : args.epochs,
                 'state_dict' : model.state_dict(),
+                'classifier' : model.classifier,
                 'class_to_idx' : model.class_to_idx}, args.save_dir)
     print("--Checkpoint saved")
 
@@ -163,5 +166,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-   
-          
