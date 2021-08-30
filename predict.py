@@ -4,6 +4,7 @@ import torch
 import json
 import torchvision.transforms as transforms
 import torchvision.models as models
+from collections import OrderedDict
 from torch import nn, optim
 from PIL import Image
 
@@ -35,12 +36,13 @@ def setup_predict_network(arch="vgg16", dropout=0.1, hidden_units=4096, lr=0.001
     for param in model.parameters():
         param.requires_grad=False
     
-    model.classifier = nn.Sequential(nn.Linear(structures[arch], hidden_units),
-                                     nn.ReLU(),
-                                     nn.Dropout(dropout),
-                                     nn.Linear(hidden_units, 102),
-                                     nn.LogSoftmax(dim=1)
-                                    )
+    model.classifier = nn.Sequential(OrderedDict([('fc1', nn.Linear(structures[arch], hidden_units[0])),
+                                                  ('relu1', nn.ReLU()),
+                                                  ('dropout1', nn.Dropout(dropout)),
+                                                  ('fc2', nn.Linear(hidden_units[0], hidden_units[1])),
+                                                  ('dropout2', nn.Dropout(dropout)),
+                                                  ('fc3', nn.Linear(hidden_units[1], 102)),
+                                                  ('output', nn.LogSoftmax(dim=1))]))
     model = model.to('cuda')
     #criterion = nn.NLLLoss()
     #optimizer = optim.Adam(model.classifier.parameters(), lr)
@@ -58,13 +60,23 @@ def load_checkpoint(filepath = 'checkpoint.pth'):
     epochs = checkpoint['epochs']
     arch = checkpoint['arch']
     
-    model = setup_predict_network(arch, dropout, hiddenUnits, lr)
+    #model = setup_predict_network(arch, dropout, hiddenUnits, lr)
+    
+    if arch == 'vgg16':
+        model = models.vgg16(pretrained=True)
+    elif arch == 'densenet121':
+        model = models.densenet121(pretrained=True)
+    
+    model.classifier = checkpoint['classifier']
     
     model.class_to_idx = checkpoint['class_to_idx']
     
     model.load_state_dict(checkpoint['state_dict'])
     
+    model = model.to('cuda')
+    
     return model
+
 
 def process_image(image):
     perform_transforms = transforms.Compose([transforms.Resize(255),
